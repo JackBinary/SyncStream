@@ -24,6 +24,8 @@
         const inviteLink = $('inviteLink');
         const copyLinkBtn = $('copyLinkBtn');
         const closeModalBtn = $('closeModalBtn');
+        const policyModal = $('policyModal');
+        const closePolicyBtn = $('closePolicyBtn');
 
         let socket = null;
         let isRemoteAction = false;
@@ -101,6 +103,20 @@
         });
         closeModalBtn.addEventListener('click', () => inviteModal.classList.remove('active'));
         inviteModal.addEventListener('click', e => { if (e.target === inviteModal) inviteModal.classList.remove('active'); });
+
+        closePolicyBtn.addEventListener('click', () => policyModal.classList.remove('active'));
+        policyModal.addEventListener('click', e => { if (e.target === policyModal) policyModal.classList.remove('active'); });
+
+        // Policy modal link is in footer which loads after script, so wait for DOM
+        document.addEventListener('DOMContentLoaded', () => {
+            const policyLink = $('policyLink');
+            if (policyLink) {
+                policyLink.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    policyModal.classList.add('active');
+                });
+            }
+        });
 
         setTimeout(connect, 100);
 

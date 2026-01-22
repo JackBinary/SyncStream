@@ -74,6 +74,44 @@
         </div>
     </div>
 
+    <div class="modal-overlay" id="policyModal">
+        <div class="modal policy-modal">
+            <h2>Privacy & Terms</h2>
+            <div class="policy-content">
+                <h3>Privacy Policy</h3>
+                <p>We respect your privacy. Here's what you need to know:</p>
+                <ul>
+                    <li><strong>No persistent data storage</strong> - Everything happens in memory only</li>
+                    <li><strong>IP addresses</strong> are temporarily used for rate limiting to prevent abuse</li>
+                    <li><strong>Nicknames, chat messages, and video URLs</strong> are never saved to disk</li>
+                    <li><strong>Room data is deleted</strong> automatically when the last person leaves</li>
+                    <li><strong>No cookies, no tracking, no analytics</strong></li>
+                </ul>
+                <p>In short: We don't keep any information about you other than what's needed to make the site work while you're using it.</p>
+                
+                <h3>Terms of Service</h3>
+                <p>By using SyncStream, you agree to:</p>
+                <ul>
+                    <li><strong>Not use this service for any illegal activities</strong></li>
+                    <li><strong>Not abuse the service</strong> through spam, flooding, or excessive requests</li>
+                    <li><strong>Respect other users</strong> and maintain a friendly environment</li>
+                    <li><strong>Only share content you have the right to share</strong></li>
+                </ul>
+                <p>We reserve the right to terminate service to anyone violating these terms.</p>
+            </div>
+            <button class="btn-secondary close-btn" id="closePolicyBtn">Close</button>
+        </div>
+    </div>
+
     <script src="/static/script.js"></script>
+    
+    <footer>
+        &copy; 2026 JackBinary. &nbsp;|&nbsp;
+        Licensed under Elastic License 2.0. &nbsp;|&nbsp;
+        <a href="#" id="policyLink">Privacy & Terms</a> &nbsp;|&nbsp;
+        <a href="https://github.com/JackBinary/SyncStream" target="_blank" rel="noopener noreferrer">
+            Star us or deploy your own instance from our GitHub!
+        </a>
+    </footer>
 </body>
 </html>

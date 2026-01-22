@@ -18,6 +18,8 @@
             background: var(--bg);
             color: var(--text);
             min-height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
 
         .container {
@@ -25,7 +27,7 @@
             flex-direction: column;
             align-items: center;
             padding: 24px;
-            min-height: 100vh;
+            flex: 1;
         }
 
         header { text-align: center; margin-bottom: 24px; }
@@ -267,6 +269,34 @@
         .modal .link-box { display: flex; gap: 8px; }
         .modal input { flex: 1; font-size: 0.85rem; }
         .modal .close-btn { margin-top: 16px; width: 100%; }
+
+        .policy-modal { max-width: 600px; max-height: 80vh; overflow-y: auto; }
+        .policy-content { margin-bottom: 16px; }
+        .policy-content h3 { font-size: 0.95rem; color: var(--accent); margin: 16px 0 8px 0; }
+        .policy-content h3:first-child { margin-top: 0; }
+        .policy-content p { font-size: 0.85rem; line-height: 1.5; margin-bottom: 12px; color: var(--text-dim); }
+        .policy-content ul { margin: 8px 0 12px 20px; }
+        .policy-content li { font-size: 0.85rem; line-height: 1.6; margin-bottom: 6px; color: var(--text); }
+        .policy-content strong { color: var(--text); font-weight: 600; }
+
+        footer {
+            text-align: center;
+            padding: 2px 4px;
+            width: 100%;
+            border-top: 1px solid var(--border);
+            background: var(--surface);
+        }
+
+        footer a {
+            color: var(--text-dim);
+            text-decoration: none;
+            font-size: 0.85rem;
+            transition: color 0.2s;
+        }
+
+        footer a:hover {
+            color: var(--accent);
+        }
 
         @media (max-width: 800px) {
             .main-content { flex-direction: column; }
