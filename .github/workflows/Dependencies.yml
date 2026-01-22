@@ -1,0 +1,31 @@
+name: Dependencies
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 0 * * 0'
+
+jobs:
+  pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install pip-audit
+        run: pip install pip-audit
+      
+      - name: Create requirements
+        run: |
+          echo "fastapi" > requirements.txt
+          echo "uvicorn[standard]" >> requirements.txt
+      
+      - name: Run pip-audit
+        run: pip-audit -r requirements.txt
