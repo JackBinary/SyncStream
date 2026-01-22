@@ -1,0 +1,38 @@
+name: Bandit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  bandit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install Bandit
+        run: pip install bandit
+      
+      - name: Run Bandit
+        run: bandit -r . -f json -o bandit-results.json --exit-zero
+      
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-results
+          path: bandit-results.json
+      
+      - name: Fail on high severity
+        run: |
+          HIGH=$(python3 -c "import json; d=json.load(open('bandit-results.json')); print(len([r for r in d['results'] if r['issue_severity']=='HIGH']))")
+          if [ "$HIGH" -gt 0 ]; then
+            echo "::error::Found $HIGH high severity issues"
+            exit 1
+          fi
