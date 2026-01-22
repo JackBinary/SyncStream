@@ -1,10 +1,17 @@
+"""SyncStream - Watch together, anywhere.
+
+A FastAPI-based synchronized video watching application with WebSocket support.
+"""
+
+import json
+import re
+import secrets
+import time
+from collections import defaultdict
+
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
-import json
-import time
-import re
-from collections import defaultdict
 
 app = FastAPI()
 
@@ -46,7 +53,7 @@ def is_safe_url(url: str) -> bool:
     return url.startswith('http://') or url.startswith('https://')
 
 def generate_room_code() -> str:
-    import secrets
+    """Generate a random 6-character room code."""
     chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     return ''.join(secrets.choice(chars) for _ in range(6))
 
@@ -59,7 +66,9 @@ def parse_video_url(url: str) -> dict | None:
         return None
 
     # YouTube: validate ID is exactly 11 alphanumeric/dash/underscore chars
-    yt_match = re.search(r'(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)([a-zA-Z0-9_-]{11})(?:[&?]|$)', url)
+    yt_pattern = r'(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)'
+    yt_pattern += r'([a-zA-Z0-9_-]{11})(?:[&?]|$)'
+    yt_match = re.search(yt_pattern, url)
     if yt_match:
         vid_id = yt_match.group(1)
         # Extra validation - must be alphanumeric with dash/underscore only
@@ -73,7 +82,8 @@ def parse_video_url(url: str) -> dict | None:
 
     # Twitch channel: validate channel name format
     twitch_channel = re.search(r'twitch\.tv/([a-zA-Z0-9_]{1,25})(?:[?]|$)', url)
-    if twitch_channel and twitch_channel.group(1).lower() not in ('videos', 'directory', 'settings'):
+    reserved_paths = ('videos', 'directory', 'settings')
+    if twitch_channel and twitch_channel.group(1).lower() not in reserved_paths:
         return {"type": "twitch_live", "id": twitch_channel.group(1)}
 
     # Direct video URL - must be http(s)
@@ -790,10 +800,13 @@ HTML = """
 
 @app.get("/")
 async def get_page():
+    """Serve the main HTML page."""
     return HTMLResponse(HTML)
 
 @app.websocket("/ws/{room_code}")
 async def websocket_handler(websocket: WebSocket, room_code: str):
+    # pylint: disable=too-many-locals,too-many-branches,too-many-statements
+    """Handle WebSocket connections for room synchronization."""
     # Get client IP for rate limiting
     client_ip = websocket.client.host if websocket.client else "unknown"
 
@@ -837,7 +850,9 @@ async def websocket_handler(websocket: WebSocket, room_code: str):
         "viewers": len(room["clients"])
     }))
 
-    await broadcast(room_code, {"type": "viewers", "count": len(room["clients"])}, exclude=websocket)
+    await broadcast(
+        room_code, {"type": "viewers", "count": len(room["clients"])}, exclude=websocket
+    )
 
     try:
         while True:
@@ -850,7 +865,10 @@ async def websocket_handler(websocket: WebSocket, room_code: str):
                 await websocket.send_text(json.dumps({"type": "pong", "t": msg["t"]}))
 
             elif msg["type"] == "join":
-                await broadcast(room_code, {"type": "system", "text": f"{nick} joined"}, exclude=websocket)
+                await broadcast(
+                    room_code, {"type": "system", "text": f"{nick} joined"},
+                    exclude=websocket
+                )
 
             elif msg["type"] == "chat":
                 if check_rate_limit(client_ip, "message"):
@@ -861,16 +879,19 @@ async def websocket_handler(websocket: WebSocket, room_code: str):
 
             elif msg["type"] == "queue":
                 if check_rate_limit(client_ip, "queue"):
-                    await websocket.send_text(json.dumps({"type": "system", "text": "Rate limited, slow down"}))
+                    rate_msg = {"type": "system", "text": "Rate limited, slow down"}
+                    await websocket.send_text(json.dumps(rate_msg))
                     continue
                 if len(room["queue"]) >= MAX_QUEUE_LENGTH:
-                    await websocket.send_text(json.dumps({"type": "system", "text": "Queue is full"}))
+                    full_msg = {"type": "system", "text": "Queue is full"}
+                    await websocket.send_text(json.dumps(full_msg))
                     continue
                 url = msg.get("url", "").strip()
                 if url:
                     parsed = parse_video_url(url)
                     if parsed is None:
-                        await websocket.send_text(json.dumps({"type": "system", "text": "Invalid URL (must be http/https)"}))
+                        err = {"type": "system", "text": "Invalid URL (must be http/https)"}
+                        await websocket.send_text(json.dumps(err))
                         continue
                     if parsed["type"] == "youtube":
                         parsed["display"] = f"YouTube: {parsed['id']}"
@@ -886,9 +907,13 @@ async def websocket_handler(websocket: WebSocket, room_code: str):
                     if len(room["queue"]) == 1:
                         room["position"] = 0
                         room["playing"] = False
-                        await broadcast(room_code, {"type": "load", "current": parsed, "queue": room["queue"]})
+                        load_msg = {"type": "load", "current": parsed, "queue": room["queue"]}
+                        await broadcast(room_code, load_msg)
                     else:
-                        await broadcast(room_code, {"type": "queue_update", "queue": room["queue"], "nick": nick})
+                        update_msg = {
+                            "type": "queue_update", "queue": room["queue"], "nick": nick
+                        }
+                        await broadcast(room_code, update_msg)
 
             elif msg["type"] == "skip":
                 if room["queue"]:
@@ -896,28 +921,33 @@ async def websocket_handler(websocket: WebSocket, room_code: str):
                     room["position"] = 0
                     room["playing"] = False
                     current = room["queue"][0] if room["queue"] else None
-                    await broadcast(room_code, {"type": "load", "current": current, "queue": room["queue"]})
-                    await broadcast(room_code, {"type": "system", "text": f"{nick} skipped"})
+                    load_msg = {"type": "load", "current": current, "queue": room["queue"]}
+                    await broadcast(room_code, load_msg)
+                    skip_msg = {"type": "system", "text": f"{nick} skipped"}
+                    await broadcast(room_code, skip_msg)
 
             elif msg["type"] == "play":
                 room["playing"] = True
                 pos = msg.get("position", 0)
                 room["position"] = max(0, float(pos)) if isinstance(pos, (int, float)) else 0
                 room["last_update"] = time.time()
-                await broadcast(room_code, {"type": "play", "position": room["position"], "nick": nick}, exclude=websocket)
+                play_msg = {"type": "play", "position": room["position"], "nick": nick}
+                await broadcast(room_code, play_msg, exclude=websocket)
 
             elif msg["type"] == "pause":
                 room["playing"] = False
                 pos = msg.get("position", 0)
                 room["position"] = max(0, float(pos)) if isinstance(pos, (int, float)) else 0
                 room["last_update"] = time.time()
-                await broadcast(room_code, {"type": "pause", "position": room["position"], "nick": nick}, exclude=websocket)
+                pause_msg = {"type": "pause", "position": room["position"], "nick": nick}
+                await broadcast(room_code, pause_msg, exclude=websocket)
 
             elif msg["type"] == "seek":
                 pos = msg.get("position", 0)
                 room["position"] = max(0, float(pos)) if isinstance(pos, (int, float)) else 0
                 room["last_update"] = time.time()
-                await broadcast(room_code, {"type": "seek", "position": room["position"]}, exclude=websocket)
+                seek_msg = {"type": "seek", "position": room["position"]}
+                await broadcast(room_code, seek_msg, exclude=websocket)
 
             elif msg["type"] == "ended":
                 if room["queue"]:
@@ -925,12 +955,15 @@ async def websocket_handler(websocket: WebSocket, room_code: str):
                     room["position"] = 0
                     room["playing"] = False
                     current = room["queue"][0] if room["queue"] else None
-                    await broadcast(room_code, {"type": "load", "current": current, "queue": room["queue"]})
+                    load_msg = {"type": "load", "current": current, "queue": room["queue"]}
+                    await broadcast(room_code, load_msg)
 
     except WebSocketDisconnect:
         pass
-    except Exception as e:
-        print(f"WebSocket error: {e}")
+    except (json.JSONDecodeError, KeyError, ValueError, TypeError) as exc:
+        print(f"WebSocket message error: {exc}")
+    except (RuntimeError, ConnectionError) as exc:
+        print(f"WebSocket connection error: {exc}")
     finally:
         nick = room["clients"].get(websocket, {}).get("nick", "Guest")
         rooms[room_code]["clients"].pop(websocket, None)
@@ -942,6 +975,7 @@ async def websocket_handler(websocket: WebSocket, room_code: str):
             await broadcast(room_code, {"type": "system", "text": f"{nick} left"})
 
 async def broadcast(room_code: str, message: dict, exclude: WebSocket = None):
+    """Broadcast a message to all clients in a room except the excluded one."""
     if room_code not in rooms:
         return
     payload = json.dumps(message)
@@ -951,7 +985,7 @@ async def broadcast(room_code: str, message: dict, exclude: WebSocket = None):
             continue
         try:
             await ws.send_text(payload)
-        except:
+        except (WebSocketDisconnect, RuntimeError, ConnectionError):
             dead.append(ws)
     for ws in dead:
         rooms[room_code]["clients"].pop(ws, None)
