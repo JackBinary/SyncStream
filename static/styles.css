@@ -71,7 +71,7 @@
         input::placeholder { color: var(--text-dim); }
 
         .code-input {
-            width: 90px;
+            width: 128px;
             text-align: center;
             font-family: 'SF Mono', Monaco, monospace;
             font-size: 1rem;
