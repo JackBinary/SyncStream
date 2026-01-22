@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SyncStream</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Sync<span>Stream</span></h1>
+            <p class="subtitle">Watch together, anywhere</p>
+        </header>
+
+        <div class="card">
+            <div class="top-controls">
+                <label>Room</label>
+                <input type="text" id="roomCode" class="code-input" maxlength="6" placeholder="ABC123">
+                <button id="newRoomBtn" class="btn-secondary btn-small">New</button>
+                <button id="joinBtn" class="btn-small">Join</button>
+                <button id="inviteBtn" class="btn-secondary btn-small">Invite Link</button>
+                <label>Nickname</label>
+                <input type="text" id="nickname" class="nick-input" maxlength="20" placeholder="Guest">
+                <div class="status">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="statusText">Not connected</span>
+                </div>
+            </div>
+            <div class="url-row">
+                <input type="text" id="mediaUrl" class="url-input" placeholder="Paste YouTube, Twitch, or direct video URL...">
+                <button id="addBtn" disabled>Add to Queue</button>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="left-panel">
+                <div class="player-wrapper" id="playerWrapper">
+                    <div id="playerContainer"></div>
+                    <div class="sync-toast" id="syncToast"></div>
+                    <div class="viewers" id="viewers">1 viewer</div>
+                </div>
+
+                <div class="queue-panel" id="queuePanel">
+                    <div class="queue-header">
+                        <h3>Queue</h3>
+                        <button id="skipBtn" class="btn-skip btn-small">Skip</button>
+                    </div>
+                    <div class="queue-list" id="queueList">
+                        <div class="queue-empty">Queue is empty</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-panel" id="chatPanel">
+                <div class="chat-header">Chat</div>
+                <div class="chat-messages" id="chatMessages"></div>
+                <div class="chat-input-row">
+                    <input type="text" id="chatInput" placeholder="Type a message..." maxlength="500">
+                    <button id="sendBtn">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="inviteModal">
+        <div class="modal">
+            <h2>Invite Friends</h2>
+            <div class="link-box">
+                <input type="text" id="inviteLink" readonly>
+                <button id="copyLinkBtn">Copy</button>
+            </div>
+            <button class="btn-secondary close-btn" id="closeModalBtn">Close</button>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
