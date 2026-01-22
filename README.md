@@ -4,11 +4,11 @@
 [![Bandit](https://github.com/JackBinary/SyncStream/actions/workflows/bandit.yml/badge.svg)](https://github.com/JackBinary/SyncStream/actions/workflows/bandit.yml)
 [![Semgrep](https://github.com/JackBinary/SyncStream/actions/workflows/semgrep.yml/badge.svg)](https://github.com/JackBinary/SyncStream/actions/workflows/semgrep.yml)
 [![Docker Image CI](https://github.com/JackBinary/SyncStream/actions/workflows/docker-image.yml/badge.svg)](https://github.com/JackBinary/SyncStream/actions/workflows/docker-image.yml)
+[![License](https://img.shields.io/badge/License-Elastic--2.0-blue.svg)](LICENSE)
 
-Watch videos together with friends, synchronized across all viewers.
+A lightweight, self-hosted video synchronization service for watching YouTube, Twitch VODs, and raw mp4 files together in real-time.
 
-This started as a test of local LLM code generation capability but I actually found it useful.
-Cleaned it up and did my best to make sure it's actually a secure, useful site.
+Originally built as an experiment with local LLM code generation, it turned out to be genuinely useful for watch parties and remote hangouts.
 
 ## Features
 
@@ -49,3 +49,6 @@ docker compose up
 ## Security
 
 The app includes rate limiting, input validation, and XSS protection.
+
+## License
+This project is licensed under the Elastic License 2.0 - see the [LICENSE](LICENSE) file for details.
