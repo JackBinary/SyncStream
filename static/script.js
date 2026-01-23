@@ -1,4 +1,4 @@
-        const $ = id => document.getElementById(id);
+const $ = id => document.getElementById(id);
 
         const roomInput = $('roomCode');
         const nickInput = $('nickname');
@@ -31,11 +31,20 @@
         let isRemoteAction = false;
         let lastSentSeek = 0;
         let pingInterval = null;
+        let syncInterval = null;
         let latency = 0;
         let queue = [];
         let currentMedia = null;
         let ytPlayer = null;
         let ytReady = false;
+        let isHost = false;
+
+        // Sync tolerance - how far off (in seconds) before forcing a sync
+        const SYNC_TOLERANCE = 3.0;  // Increased from 0.5 to 3 seconds
+        // How often host reports position (ms)
+        const HOST_REPORT_INTERVAL = 5000;
+        // How often non-hosts check sync (ms)  
+        const SYNC_CHECK_INTERVAL = 10000;
 
         // Load YouTube API
         const ytScript = document.createElement('script');
@@ -131,6 +140,14 @@
             setTimeout(() => syncToast.classList.remove('show'), 2000);
         }
 
+        function updateHostIndicator() {
+            // Update status to show host status
+            if (socket?.readyState === WebSocket.OPEN) {
+                const hostText = isHost ? ' (Host)' : '';
+                setStatus('Connected' + hostText, 'connected');
+            }
+        }
+
         function addToQueue() {
             const url = urlInput.value.trim();
             if (!url || !socket || socket.readyState !== WebSocket.OPEN) return;
@@ -182,6 +199,29 @@
             }).join('');
         }
 
+        function startSyncIntervals() {
+            clearInterval(syncInterval);
+            
+            if (isHost) {
+                // Host periodically reports their position
+                syncInterval = setInterval(() => {
+                    if (socket?.readyState === WebSocket.OPEN && currentMedia) {
+                        socket.send(JSON.stringify({ 
+                            type: 'host_position', 
+                            position: getPosition() 
+                        }));
+                    }
+                }, HOST_REPORT_INTERVAL);
+            } else {
+                // Non-hosts periodically request sync
+                syncInterval = setInterval(() => {
+                    if (socket?.readyState === WebSocket.OPEN && currentMedia) {
+                        socket.send(JSON.stringify({ type: 'sync_request' }));
+                    }
+                }, SYNC_CHECK_INTERVAL);
+            }
+        }
+
         function connect() {
             const code = roomInput.value.trim();
             if (code.length !== 6) { setStatus('Enter 6-char code', 'error'); return; }
@@ -203,7 +243,13 @@
                 socket.send(JSON.stringify({ type: 'ping', t: Date.now() }));
             };
 
-            socket.onclose = () => { setStatus('Disconnected', 'disconnected'); addBtn.disabled = true; clearInterval(pingInterval); };
+            socket.onclose = () => { 
+                setStatus('Disconnected', 'disconnected'); 
+                addBtn.disabled = true; 
+                clearInterval(pingInterval); 
+                clearInterval(syncInterval);
+                isHost = false;
+            };
             socket.onerror = () => setStatus('Connection failed', 'error');
             socket.onmessage = e => handleMessage(JSON.parse(e.data));
         }
@@ -215,11 +261,26 @@
                 case 'state':
                     viewersEl.textContent = msg.viewers + ' viewer' + (msg.viewers === 1 ? '' : 's');
                     queue = msg.queue || [];
+                    isHost = msg.isHost || false;
+                    updateHostIndicator();
+                    startSyncIntervals();
                     renderQueue();
                     if (msg.current) {
                         loadMedia(msg.current);
                         if (msg.position > 0) seekTo(msg.position);
                         if (msg.playing) playMedia();
+                    }
+                    break;
+
+                case 'host_update':
+                    const wasHost = isHost;
+                    isHost = msg.isHost || false;
+                    updateHostIndicator();
+                    if (wasHost !== isHost) {
+                        startSyncIntervals();
+                        if (isHost) {
+                            showToast('You are now the host');
+                        }
                     }
                     break;
 
@@ -253,11 +314,35 @@
                     break;
 
                 case 'seek':
-                    if (Math.abs(getPosition() - msg.position) > 0.5) {
+                    // Use increased tolerance
+                    if (Math.abs(getPosition() - msg.position) > SYNC_TOLERANCE) {
                         isRemoteAction = true;
                         seekTo(msg.position);
                         showToast('Synced');
                         setTimeout(() => isRemoteAction = false, 100);
+                    }
+                    break;
+
+                case 'sync_response':
+                    // Non-host received sync info - check if we need to adjust
+                    if (!isHost && currentMedia) {
+                        const diff = Math.abs(getPosition() - msg.position);
+                        if (diff > SYNC_TOLERANCE) {
+                            isRemoteAction = true;
+                            seekTo(msg.position);
+                            showToast('Synced to host');
+                            setTimeout(() => isRemoteAction = false, 100);
+                        }
+                        // Also sync play state
+                        if (msg.playing && isPaused()) {
+                            isRemoteAction = true;
+                            playMedia();
+                            setTimeout(() => isRemoteAction = false, 100);
+                        } else if (!msg.playing && !isPaused()) {
+                            isRemoteAction = true;
+                            pauseMedia();
+                            setTimeout(() => isRemoteAction = false, 100);
+                        }
                     }
                     break;
 
@@ -362,4 +447,14 @@
             const v = $('directVideo');
             if (v) return v.currentTime;
             return 0;
+        }
+
+        function isPaused() {
+            if (ytPlayer?.getPlayerState) {
+                const state = ytPlayer.getPlayerState();
+                return state === YT.PlayerState.PAUSED || state === YT.PlayerState.CUED || state === -1;
+            }
+            const v = $('directVideo');
+            if (v) return v.paused;
+            return true;
         }

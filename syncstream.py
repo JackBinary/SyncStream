@@ -92,6 +92,17 @@ def parse_video_url(url: str) -> dict | None:
     # Direct video URL - must be http(s)
     return {"type": "direct", "url": url}
 
+def get_host(room: dict) -> WebSocket | None:
+    """Get the host (oldest client) for a room."""
+    if not room["clients"]:
+        return None
+    # Find client with earliest join_time
+    return min(room["clients"].keys(), key=lambda ws: room["clients"][ws]["join_time"])
+
+def is_host(room: dict, websocket: WebSocket) -> bool:
+    """Check if this websocket is the host."""
+    return get_host(room) == websocket
+
 @app.get("/")
 async def get_page():
     """Serve the main HTML page."""
@@ -134,6 +145,9 @@ async def websocket_handler(websocket: WebSocket, room_code: str):
     room = rooms[room_code]
     room["clients"][websocket] = {"nick": "Guest", "join_time": time.time(), "ip": client_ip}
 
+    # Determine if this client is the host
+    client_is_host = is_host(room, websocket)
+
     current = room["queue"][0] if room["queue"] else None
     await websocket.send_text(json.dumps({
         "type": "state",
@@ -141,7 +155,8 @@ async def websocket_handler(websocket: WebSocket, room_code: str):
         "queue": room["queue"],
         "playing": room["playing"],
         "position": room["position"],
-        "viewers": len(room["clients"])
+        "viewers": len(room["clients"]),
+        "isHost": client_is_host
     }))
 
     await broadcast(
@@ -155,6 +170,9 @@ async def websocket_handler(websocket: WebSocket, room_code: str):
             nick = sanitize_nick(msg.get("nick", "Guest"))
             room["clients"][websocket]["nick"] = nick
 
+            # Check if this client is currently the host
+            client_is_host = is_host(room, websocket)
+
             if msg["type"] == "ping":
                 await websocket.send_text(json.dumps({"type": "pong", "t": msg["t"]}))
 
@@ -163,6 +181,8 @@ async def websocket_handler(websocket: WebSocket, room_code: str):
                     room_code, {"type": "system", "text": f"{nick} joined"},
                     exclude=websocket
                 )
+                # Notify all clients about who the host is
+                await broadcast_host_status(room_code)
 
             elif msg["type"] == "chat":
                 if check_rate_limit(client_ip, "message"):
@@ -221,27 +241,48 @@ async def websocket_handler(websocket: WebSocket, room_code: str):
                     await broadcast(room_code, skip_msg)
 
             elif msg["type"] == "play":
+                # Only broadcast if from host, or update server state if from anyone
                 room["playing"] = True
                 pos = msg.get("position", 0)
                 room["position"] = max(0, float(pos)) if isinstance(pos, (int, float)) else 0
                 room["last_update"] = time.time()
-                play_msg = {"type": "play", "position": room["position"], "nick": nick}
-                await broadcast(room_code, play_msg, exclude=websocket)
+                if client_is_host:
+                    play_msg = {"type": "play", "position": room["position"], "nick": nick}
+                    await broadcast(room_code, play_msg, exclude=websocket)
 
             elif msg["type"] == "pause":
+                # Only broadcast if from host
                 room["playing"] = False
                 pos = msg.get("position", 0)
                 room["position"] = max(0, float(pos)) if isinstance(pos, (int, float)) else 0
                 room["last_update"] = time.time()
-                pause_msg = {"type": "pause", "position": room["position"], "nick": nick}
-                await broadcast(room_code, pause_msg, exclude=websocket)
+                if client_is_host:
+                    pause_msg = {"type": "pause", "position": room["position"], "nick": nick}
+                    await broadcast(room_code, pause_msg, exclude=websocket)
 
             elif msg["type"] == "seek":
+                # Only broadcast if from host
                 pos = msg.get("position", 0)
                 room["position"] = max(0, float(pos)) if isinstance(pos, (int, float)) else 0
                 room["last_update"] = time.time()
-                seek_msg = {"type": "seek", "position": room["position"]}
-                await broadcast(room_code, seek_msg, exclude=websocket)
+                if client_is_host:
+                    seek_msg = {"type": "seek", "position": room["position"]}
+                    await broadcast(room_code, seek_msg, exclude=websocket)
+
+            elif msg["type"] == "sync_request":
+                # Non-host clients can request current position from server
+                await websocket.send_text(json.dumps({
+                    "type": "sync_response",
+                    "position": room["position"],
+                    "playing": room["playing"]
+                }))
+
+            elif msg["type"] == "host_position":
+                # Host reports their position periodically for sync
+                if client_is_host:
+                    pos = msg.get("position", 0)
+                    room["position"] = max(0, float(pos)) if isinstance(pos, (int, float)) else 0
+                    room["last_update"] = time.time()
 
             elif msg["type"] == "ended":
                 if room["queue"]:
@@ -260,6 +301,7 @@ async def websocket_handler(websocket: WebSocket, room_code: str):
         print(f"WebSocket connection error: {exc}")
     finally:
         nick = room["clients"].get(websocket, {}).get("nick", "Guest")
+        was_host = is_host(room, websocket)
         rooms[room_code]["clients"].pop(websocket, None)
         remaining = len(rooms[room_code]["clients"])
         if remaining == 0:
@@ -267,6 +309,24 @@ async def websocket_handler(websocket: WebSocket, room_code: str):
         else:
             await broadcast(room_code, {"type": "viewers", "count": remaining})
             await broadcast(room_code, {"type": "system", "text": f"{nick} left"})
+            # If host left, notify everyone about new host
+            if was_host:
+                await broadcast_host_status(room_code)
+
+async def broadcast_host_status(room_code: str):
+    """Notify all clients about who the current host is."""
+    if room_code not in rooms:
+        return
+    room = rooms[room_code]
+    host_ws = get_host(room)
+    for ws in room["clients"]:
+        try:
+            await ws.send_text(json.dumps({
+                "type": "host_update",
+                "isHost": ws == host_ws
+            }))
+        except (WebSocketDisconnect, RuntimeError, ConnectionError):
+            pass
 
 async def broadcast(room_code: str, message: dict, exclude: WebSocket = None):
     """Broadcast a message to all clients in a room except the excluded one."""
